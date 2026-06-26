@@ -2,6 +2,7 @@ package bgp
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"log/slog"
@@ -18,6 +19,15 @@ import (
 	"github.com/osrg/gobgp/v4/pkg/packet/bgp"
 	"github.com/osrg/gobgp/v4/pkg/server"
 )
+
+type LSLinkInfo struct {
+	LocalAddr      netip.Addr
+	PeerAddr       netip.Addr
+	RemoteRouterID string
+	RemoteASN      uint32
+	Metric         uint32
+	AdjSID         uint32
+}
 
 type PeerConfig struct {
 	Name        string
@@ -39,6 +49,7 @@ type SpeakerConfig struct {
 	ImportFilter []string
 	Peers        []PeerConfig
 	LocalRoutes  []LocalRoute
+	LSLinks      []LSLinkInfo     // BGP-LS link advertisements
 }
 
 type Speaker struct {
@@ -103,6 +114,12 @@ func (s *Speaker) Start(ctx context.Context) error {
 	for _, r := range s.cfg.LocalRoutes {
 		if err := s.addLocalRoute(r); err != nil {
 			log.Printf("bgp: add local route %s: %v", r.Prefix, err)
+		}
+	}
+
+	for _, ls := range s.cfg.LSLinks {
+		if err := s.addLSRoutes(ctx, ls); err != nil {
+			log.Printf("bgp-ls: add routes for %s: %v", ls.RemoteRouterID, err)
 		}
 	}
 
@@ -354,6 +371,82 @@ func extractSegments(attrs []bgp.PathAttributeInterface) []uint32 {
 	return nil
 }
 
+func (s *Speaker) addLSRoutes(ctx context.Context, ls LSLinkInfo) error {
+	routerAddr, _ := netip.ParseAddr(s.cfg.RouterID)
+	localAS := s.cfg.ASN
+
+	// Node NLRI
+	nodeND := &bgp.LsNodeDescriptor{
+		Asn:       localAS,
+		BGPLsID:   binary.BigEndian.Uint32(routerAddr.AsSlice()),
+		IGPRouterID: s.cfg.RouterID,
+	}
+	nodeNlri := &bgp.LsNodeNLRI{
+		LsNLRI: bgp.LsNLRI{
+			NLRIType:   bgp.LS_NLRI_TYPE_NODE,
+			ProtocolID: bgp.LS_PROTOCOL_BGP,
+			Identifier: 0,
+		},
+	}
+	nd := bgp.NewLsTLVNodeDescriptor(nodeND, bgp.LS_TLV_LOCAL_NODE_DESC)
+	nodeNlri.LocalNodeDesc = &nd
+	nodePrefix := &bgp.LsAddrPrefix{
+		Type: bgp.LS_NLRI_TYPE_NODE,
+		NLRI: nodeNlri,
+	}
+	if err := s.addLSPath(ctx, nodePrefix); err != nil {
+		return fmt.Errorf("node nlri: %w", err)
+	}
+
+	// Link NLRI
+	remoteAddr, _ := netip.ParseAddr(ls.RemoteRouterID)
+	remoteND := &bgp.LsNodeDescriptor{
+		Asn:       ls.RemoteASN,
+		BGPLsID:   binary.BigEndian.Uint32(remoteAddr.AsSlice()),
+		IGPRouterID: ls.RemoteRouterID,
+	}
+	linkDesc := &bgp.LsLinkDescriptor{
+		InterfaceAddrIPv4: ptrAddr(ls.LocalAddr),
+		NeighborAddrIPv4:  ptrAddr(ls.PeerAddr),
+	}
+	linkNlri := &bgp.LsLinkNLRI{
+		LsNLRI: bgp.LsNLRI{
+			NLRIType:   bgp.LS_NLRI_TYPE_LINK,
+			ProtocolID: bgp.LS_PROTOCOL_BGP,
+			Identifier: 0,
+		},
+	}
+	ndLocal := bgp.NewLsTLVNodeDescriptor(nodeND, bgp.LS_TLV_LOCAL_NODE_DESC)
+	ndRemote := bgp.NewLsTLVNodeDescriptor(remoteND, bgp.LS_TLV_REMOTE_NODE_DESC)
+	linkNlri.LocalNodeDesc = &ndLocal
+	linkNlri.RemoteNodeDesc = &ndRemote
+	linkNlri.LinkDesc = bgp.NewLsLinkTLVs(linkDesc)
+	linkPrefix := &bgp.LsAddrPrefix{
+		Type: bgp.LS_NLRI_TYPE_LINK,
+		NLRI: linkNlri,
+	}
+	if err := s.addLSPath(ctx, linkPrefix); err != nil {
+		return fmt.Errorf("link nlri: %w", err)
+	}
+
+	log.Printf("bgp-ls: advertised node=%s link=%s→%s adj_sid=%d",
+		s.cfg.RouterID, ls.LocalAddr, ls.PeerAddr, ls.AdjSID)
+	return nil
+}
+
+func (s *Speaker) addLSPath(ctx context.Context, nlri *bgp.LsAddrPrefix) error {
+	nh, _ := bgp.NewPathAttributeNextHop(netip.MustParseAddr(s.cfg.RouterID))
+	p := &apiutil.Path{
+		Family: bgp.RF_LS,
+		Nlri:   nlri,
+		Attrs:  []bgp.PathAttributeInterface{bgp.NewPathAttributeOrigin(0), nh},
+	}
+	_, err := s.server.AddPath(apiutil.AddPathRequest{Paths: []*apiutil.Path{p}})
+	return err
+}
+
+func ptrAddr(a netip.Addr) *netip.Addr { return &a }
+
 func buildAfiSafis(families []string) []*api.AfiSafi {
 	var result []*api.AfiSafi
 	for _, f := range families {
@@ -391,6 +484,8 @@ func familyFromString(s string) *api.Family {
 		return &api.Family{Afi: api.Family_AFI_IP6, Safi: api.Family_SAFI_MPLS_LABEL}
 	case "ipv4-srpolicy":
 		return &api.Family{Afi: api.Family_AFI_IP, Safi: api.Family_SAFI_SR_POLICY}
+	case "ls":
+		return &api.Family{Afi: api.Family_AFI_LS, Safi: api.Family_SAFI_LS}
 	default:
 		return nil
 	}
