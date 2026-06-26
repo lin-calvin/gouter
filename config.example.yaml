@@ -17,6 +17,10 @@ bgp:
   local_routes:
     - prefix: "172.20.1.0/24"
       next_hop: "172.20.1.1"
+  # sr_policies:                     # optional static SR-MPLS policies
+  #   - endpoint: "172.20.2.1"
+  #     color: 100
+  #     segments: [16001, 16002]
 
 wireguard:
   - name: "wg-peer1"

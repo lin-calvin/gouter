@@ -17,11 +17,12 @@ type Config struct {
 }
 
 type BGPConfig struct {
-	ASN         uint32       `yaml:"asn"`
-	RouterID    string       `yaml:"router_id"`
-	ImportFilter []string    `yaml:"import_filter"`
-	Peers       []BGPPeer    `yaml:"peers"`
-	LocalRoutes []LocalRoute `yaml:"local_routes"`
+	ASN          uint32        `yaml:"asn"`
+	RouterID     string        `yaml:"router_id"`
+	ImportFilter []string      `yaml:"import_filter"`
+	Peers        []BGPPeer     `yaml:"peers"`
+	LocalRoutes  []LocalRoute  `yaml:"local_routes"`
+	SRPolicies   []SRPolicy    `yaml:"sr_policies"`
 }
 
 type BGPPeer struct {
@@ -36,6 +37,12 @@ type LocalRoute struct {
 	Prefix  string `yaml:"prefix"`
 	NextHop string `yaml:"next_hop"`
 	Label   bool   `yaml:"label"`
+}
+
+type SRPolicy struct {
+	Endpoint string   `yaml:"endpoint"`
+	Color    uint32   `yaml:"color"`
+	Segments []uint32 `yaml:"segments"`
 }
 
 type WireGuardConf struct {

@@ -162,6 +162,23 @@ func main() {
 			log.Fatalf("bgp: %v", err)
 		}
 		defer speaker.Stop()
+
+		// Apply static SR policies from config
+		for _, sp := range cfg.BGP.SRPolicies {
+			endp, err := netip.ParseAddr(sp.Endpoint)
+			if err != nil {
+				log.Printf("sr-policy: bad endpoint %s: %v", sp.Endpoint, err)
+				continue
+			}
+			fib.Add(router.FIBEntry{
+				Prefix:    netip.PrefixFrom(endp, 32),
+				NextHop:   endp,
+				Action:    router.ActionPush,
+				OutLabels: sp.Segments,
+				Transport: "",
+			})
+			log.Printf("sr-policy: endpoint=%s color=%d segments=%v", sp.Endpoint, sp.Color, sp.Segments)
+		}
 	}
 
 	// Local TCP listener via netstack

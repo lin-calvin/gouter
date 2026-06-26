@@ -236,6 +236,8 @@ func (s *Speaker) handleBestPath(paths []*apiutil.Path, t time.Time) {
 			s.handleUnicastPath(p)
 		case bgp.RF_IPv4_MPLS, bgp.RF_IPv6_MPLS:
 			s.handleLabeledPath(p)
+		case bgp.RF_SR_POLICY_IPv4, bgp.RF_SR_POLICY_IPv6:
+			s.handleSRPolicy(p)
 		}
 	}
 }
@@ -295,6 +297,63 @@ func (s *Speaker) handleLabeledPath(p *apiutil.Path) {
 	}
 }
 
+func (s *Speaker) handleSRPolicy(p *apiutil.Path) {
+	nlri, ok := p.Nlri.(*bgp.SRPolicyNLRI)
+	if !ok {
+		return
+	}
+	var endp netip.Addr
+	switch nlri.Endpoint {
+	default:
+		if len(nlri.Endpoint) >= 4 {
+			endp, _ = netip.AddrFromSlice(nlri.Endpoint[:4])
+		}
+	}
+	if !endp.IsValid() {
+		return
+	}
+	endpointPrefix := netip.PrefixFrom(endp, 32)
+
+	segments := extractSegments(p.Attrs)
+
+	if p.Withdrawal {
+		s.fib.Remove(endpointPrefix)
+		log.Printf("bgp-sr: withdraw color=%d endpoint=%s", nlri.Color, endp)
+	} else {
+		s.fib.Add(router.FIBEntry{
+			Prefix:    endpointPrefix,
+			NextHop:   endp,
+			Action:    router.ActionPush,
+			OutLabels: segments,
+			Transport: "",
+		})
+		log.Printf("bgp-sr: color=%d endpoint=%s segments=%v", nlri.Color, endp, segments)
+	}
+}
+
+func extractSegments(attrs []bgp.PathAttributeInterface) []uint32 {
+	for _, attr := range attrs {
+		encap, ok := attr.(*bgp.PathAttributeTunnelEncap)
+		if !ok {
+			continue
+		}
+		for _, tlv := range encap.Value {
+			for _, sub := range tlv.Value {
+				if sl, ok := sub.(*bgp.TunnelEncapSubTLVSRSegmentList); ok {
+					var labels []uint32
+					for _, seg := range sl.Segments {
+						if typeA, ok := seg.(*bgp.SegmentTypeA); ok {
+							labels = append(labels, typeA.Label>>12)
+						}
+					}
+					return labels
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func buildAfiSafis(families []string) []*api.AfiSafi {
 	var result []*api.AfiSafi
 	for _, f := range families {
@@ -330,6 +389,8 @@ func familyFromString(s string) *api.Family {
 		return &api.Family{Afi: api.Family_AFI_IP, Safi: api.Family_SAFI_MPLS_LABEL}
 	case "ipv6-labelled-unicast":
 		return &api.Family{Afi: api.Family_AFI_IP6, Safi: api.Family_SAFI_MPLS_LABEL}
+	case "ipv4-srpolicy":
+		return &api.Family{Afi: api.Family_AFI_IP, Safi: api.Family_SAFI_SR_POLICY}
 	default:
 		return nil
 	}
