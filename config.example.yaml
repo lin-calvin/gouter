@@ -1,0 +1,48 @@
+bgp:
+  asn: 4242420001
+  router_id: "172.20.1.1"
+  # import_filter:                   # optional, accept all if not set
+  #   - "172.20.0.0/14"
+  #   - "172.31.0.0/16"
+  #   - "fd00::/8"
+  peers:
+    - name: "peer1"
+      address: "172.20.1.2"
+      asn: 4242420002
+      families: [ipv4-unicast, ipv6-unicast]
+    - name: "internal-1"
+      address: "172.20.2.2"
+      asn: 4242420001               # iBGP (same AS)
+      families: [ipv4-unicast, ipv4-labelled-unicast]
+  local_routes:
+    - prefix: "172.20.1.0/24"
+      next_hop: "172.20.1.1"
+
+wireguard:
+  - name: "wg-peer1"
+    listen_port: 51820
+    private_key: "<base64-from-wg-genkey>"
+    address: "172.20.1.1/32"
+    mtu: 1420
+    peers:
+      - public_key: "<base64-from-wg-pubkey>"
+        endpoint: "peer.example.com:51820"
+        allowed_ips: "172.20.1.2/32"
+
+  - name: "wg-internal"
+    listen_port: 51821
+    private_key: "<base64-from-wg-genkey>"
+    address: "172.20.2.1/32"
+    mtu: 1420
+    peers:
+      - public_key: "<base64-from-wg-pubkey>"
+        endpoint: "internal.example.com:51821"
+        allowed_ips: "172.20.2.2/32"
+
+# mpls:                              # optional MPLS-over-UDP transport
+#   udp:
+#     listen_port: 16635
+#     peers: ["peer.example.com:16635"]
+
+netstack:
+  tcp_port: 8080
