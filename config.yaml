@@ -15,7 +15,7 @@ links:
     wireguard:
       listen_port: 51820
       private_key: "IEV2xqWBxOg3VB2cPZlvn41YIoV5H4UdQCxOuOcqu04="
-      address: "172.22.138.38/32"
+      address: "172.22.138.35/32"
       mtu: 1420
       public_key: "k4xhSZSjptZXhp+gKzvIUomjVE+dLhEb4IqlEvBjpHA="
       endpoint: "100.64.0.1:51821"

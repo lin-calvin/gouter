@@ -158,11 +158,13 @@ func main() {
 
 func setupTransports(ctx context.Context, cfg *config.Config, ns *netstack.Manager, nexthop *router.NexthopResolver, r *router.Router) {
 	if len(cfg.Links) > 0 {
+		log.Printf("using links[] config format (%d links)", len(cfg.Links))
 		for _, link := range cfg.Links {
 			setupLinkTransport(ctx, cfg, ns, nexthop, r, link)
 		}
 		return
 	}
+	log.Printf("using legacy wireguard[] config format")
 	for _, wgCfg := range cfg.WireGuard {
 		setupOldWG(ctx, cfg, ns, nexthop, r, wgCfg)
 	}
@@ -182,20 +184,36 @@ func setupLinkTransport(ctx context.Context, cfg *config.Config, ns *netstack.Ma
 
 func setupLinkWG(ctx context.Context, ns *netstack.Manager, nexthop *router.NexthopResolver, r *router.Router, name string, wgCfg *config.WGLinkConfig) {
 	t := wg.NewTransport(name, wgCfg.MTU, device.LogLevelError)
-	skHex, _ := config.B64ToHex(wgCfg.PrivateKey)
-	pkHex, _ := config.B64ToHex(wgCfg.PublicKey)
+	skHex, err := config.B64ToHex(wgCfg.PrivateKey)
+	if err != nil {
+		log.Fatalf("%s: bad private key: %v", name, err)
+	}
+	pkHex, err := config.B64ToHex(wgCfg.PublicKey)
+	if err != nil {
+		log.Fatalf("%s: bad public key: %v", name, err)
+	}
 	uapi := fmt.Sprintf("private_key=%s\nlisten_port=%d\nreplace_peers=true\npublic_key=%s\nendpoint=%s\nreplace_allowed_ips=true\nallowed_ip=%s\n",
 		skHex, wgCfg.ListenPort, pkHex, wgCfg.Endpoint, wgCfg.AllowedIPs)
 	if err := t.Configure(uapi); err != nil {
-		log.Printf("%s: configure: %v", name, err)
+		log.Fatalf("%s: configure: %v", name, err)
 	}
-	addrPrefix, _ := netip.ParsePrefix(wgCfg.Address)
-	ns.AddNIC(netstack.NICConfig{Name: name, Address: addrPrefix, MTU: 1500})
+	addrPrefix, err := netip.ParsePrefix(wgCfg.Address)
+	if err != nil {
+		log.Fatalf("%s: bad address: %v", name, err)
+	}
+	_, err = ns.AddNIC(netstack.NICConfig{Name: name, Address: addrPrefix, MTU: 1500})
+	if err != nil {
+		log.Fatalf("add nic %s: %v", name, err)
+	}
 	nexthop.AddTransport(name, []netip.Prefix{addrPrefix})
 	if allowed, err := netip.ParsePrefix(wgCfg.AllowedIPs); err == nil {
 		ns.AddPeerRoute(name, allowed, netip.Addr{})
+	} else {
+		log.Printf("%s: bad allowed_ips: %v", name, err)
 	}
-	t.Up()
+	if err := t.Up(); err != nil {
+		log.Fatalf("%s up: %v", name, err)
+	}
 	r.AddTransport(t)
 	go handleOutbound(ctx, ns, name, t)
 	log.Printf("wg %s: %s :%d", name, wgCfg.Address, wgCfg.ListenPort)
@@ -219,13 +237,21 @@ func setupLinkMPLS(ctx context.Context, ns *netstack.Manager, nexthop *router.Ne
 
 func setupOldWG(ctx context.Context, cfg *config.Config, ns *netstack.Manager, nexthop *router.NexthopResolver, r *router.Router, wgCfg config.WireGuardConf) {
 	t := wg.NewTransport(wgCfg.Name, wgCfg.MTU, device.LogLevelError)
-	skHex, _ := config.B64ToHex(wgCfg.PrivateKey)
+	skHex, err := config.B64ToHex(wgCfg.PrivateKey)
+	if err != nil {
+		log.Fatalf("%s: bad private key: %v", wgCfg.Name, err)
+	}
 	uapi := fmt.Sprintf("private_key=%s\nlisten_port=%d\nreplace_peers=true\n", skHex, wgCfg.ListenPort)
 	for _, p := range wgCfg.Peers {
-		pkHex, _ := config.B64ToHex(p.PublicKey)
+		pkHex, err := config.B64ToHex(p.PublicKey)
+		if err != nil {
+			log.Fatalf("%s: bad peer public key: %v", wgCfg.Name, err)
+		}
 		uapi += fmt.Sprintf("public_key=%s\nendpoint=%s\nreplace_allowed_ips=true\nallowed_ip=%s\n", pkHex, p.Endpoint, p.AllowedIPs)
 	}
-	t.Configure(uapi)
+	if err := t.Configure(uapi); err != nil {
+		log.Fatalf("%s: configure: %v", wgCfg.Name, err)
+	}
 	addrPrefix, _ := netip.ParsePrefix(wgCfg.Address)
 	ns.AddNIC(netstack.NICConfig{Name: wgCfg.Name, Address: addrPrefix, MTU: 1500})
 	nexthop.AddTransport(wgCfg.Name, []netip.Prefix{addrPrefix})
