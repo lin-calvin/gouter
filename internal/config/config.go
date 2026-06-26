@@ -13,6 +13,7 @@ type Config struct {
 	BGP       BGPConfig       `yaml:"bgp"`
 	WireGuard []WireGuardConf `yaml:"wireguard"`
 	MPLS      *MPLSConfig     `yaml:"mpls"`
+	Links     []LinkConfig    `yaml:"links"`
 	Netstack  NetstackConf    `yaml:"netstack"`
 }
 
@@ -73,6 +74,40 @@ type NetstackConf struct {
 	TCPPort int `yaml:"tcp_port"`
 }
 
+type LinkConfig struct {
+	Name    string         `yaml:"name"`
+	WG      *WGLinkConfig  `yaml:"wireguard,omitempty"`
+	MPLSUDP *MPLSUDPLink   `yaml:"mpls_udp,omitempty"`
+	LS      *LinkLSConfig  `yaml:"ls,omitempty"`
+}
+
+type WGLinkConfig struct {
+	ListenPort int    `yaml:"listen_port"`
+	PrivateKey string `yaml:"private_key"`
+	Address    string `yaml:"address"`
+	MTU        int    `yaml:"mtu"`
+	PublicKey  string `yaml:"public_key"`
+	Endpoint   string `yaml:"endpoint"`
+	AllowedIPs string `yaml:"allowed_ips"`
+}
+
+type MPLSUDPLink struct {
+	ListenPort int      `yaml:"listen_port"`
+	Peers      []string `yaml:"peers"`
+}
+
+type LinkLSConfig struct {
+	RemoteRouterID string `yaml:"remote_router_id"`
+	RemoteASN      uint32 `yaml:"remote_asn"`
+	Metric         uint32 `yaml:"metric"`
+	AdjSID         uint32 `yaml:"adj_sid"`
+}
+
+type MPLSBase struct {
+	SRGBStart uint32 `yaml:"srgb_start"`
+	SRGBEnd   uint32 `yaml:"srgb_end"`
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -90,6 +125,11 @@ func Load(path string) (*Config, error) {
 	for i := range cfg.WireGuard {
 		if cfg.WireGuard[i].MTU == 0 {
 			cfg.WireGuard[i].MTU = 1420
+		}
+	}
+	for i := range cfg.Links {
+		if cfg.Links[i].WG != nil && cfg.Links[i].WG.MTU == 0 {
+			cfg.Links[i].WG.MTU = 1420
 		}
 	}
 
