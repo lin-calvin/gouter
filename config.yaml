@@ -1,0 +1,25 @@
+bgp:
+  asn: 4242423166
+  router_id: "172.22.138.38"
+  peers:
+    - name: "server"
+      address: "172.22.138.35"
+      asn: 4242423166
+      families: ["ipv4-unicast"]
+  local_routes:
+    - prefix: "172.22.138.38/32"
+      next_hop: "172.22.138.38"
+
+links:
+  - name: "server"
+    wireguard:
+      listen_port: 51820
+      private_key: "IEV2xqWBxOg3VB2cPZlvn41YIoV5H4UdQCxOuOcqu04="
+      address: "172.22.138.38/32"
+      mtu: 1420
+      public_key: "k4xhSZSjptZXhp+gKzvIUomjVE+dLhEb4IqlEvBjpHA="
+      endpoint: "100.64.0.1:51821"
+      allowed_ips: "172.16.0.0/12"
+
+netstack:
+  tcp_port: 8080

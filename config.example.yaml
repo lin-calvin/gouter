@@ -17,36 +17,50 @@ bgp:
   local_routes:
     - prefix: "172.20.1.0/24"
       next_hop: "172.20.1.1"
-  # sr_policies:                     # optional static SR-MPLS policies
+  # sr_policies:
   #   - endpoint: "172.20.2.1"
   #     color: 100
   #     segments: [16001, 16002]
 
-wireguard:
-  - name: "wg-peer1"
-    listen_port: 51820
-    private_key: "<base64-from-wg-genkey>"
-    address: "172.20.1.1/32"
-    mtu: 1420
-    peers:
-      - public_key: "<base64-from-wg-pubkey>"
-        endpoint: "peer.example.com:51820"
-        allowed_ips: "172.20.1.2/32"
+links:
+  - name: "peer1"
+    wireguard:
+      listen_port: 51820
+      private_key: "<base64-from-wg-genkey>"
+      address: "172.20.1.1/32"
+      mtu: 1420
+      public_key: "<base64-from-wg-pubkey>"
+      endpoint: "peer.example.com:51820"
+      allowed_ips: "172.20.1.2/32"
+    # ls:                              # optional BGP-LS advertisement
+    #   remote_router_id: "172.20.2.1"
+    #   remote_asn: 4242420002
+    #   metric: 10
+    #   adj_sid: 24001
 
-  - name: "wg-internal"
-    listen_port: 51821
-    private_key: "<base64-from-wg-genkey>"
-    address: "172.20.2.1/32"
-    mtu: 1420
-    peers:
-      - public_key: "<base64-from-wg-pubkey>"
-        endpoint: "internal.example.com:51821"
-        allowed_ips: "172.20.2.2/32"
+  - name: "internal"
+    wireguard:
+      listen_port: 51821
+      private_key: "<base64-from-wg-genkey>"
+      address: "172.20.2.1/32"
+      mtu: 1420
+      public_key: "<base64-from-wg-pubkey>"
+      endpoint: "internal.example.com:51821"
+      allowed_ips: "172.20.2.2/32"
 
-# mpls:                              # optional MPLS-over-UDP transport
-#   udp:
-#     listen_port: 16635
-#     peers: ["peer.example.com:16635"]
+  # - name: "mpls-trunk"
+  #   mpls_udp:
+  #     listen_port: 16635
+  #     peers: ["peer.example.com:16635"]
+  #   ls:
+  #     remote_router_id: "172.20.4.1"
+  #     remote_asn: 4242420004
+  #     metric: 100
+  #     adj_sid: 24100
+
+mpls:                                 # optional: SRGB, used with BGP-LS
+  srgb_start: 16000
+  srgb_end: 23999
 
 netstack:
   tcp_port: 8080
