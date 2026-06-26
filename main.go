@@ -127,8 +127,8 @@ func main() {
 		}
 	}
 
-	log.Printf("gouter started: %d wg + %v mpls transports",
-		len(cfg.WireGuard), cfg.MPLS != nil)
+	log.Printf("gouter started: %d links + %d legacy wg + %v mpls transports",
+		len(cfg.Links), len(cfg.WireGuard), cfg.MPLS != nil)
 
 	go func() {
 		verbose := os.Getenv("GOUTER_VERBOSE") != ""
