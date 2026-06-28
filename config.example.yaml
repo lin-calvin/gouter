@@ -43,20 +43,27 @@ routes:
 
 links:
   - name: "peer1"
+    address: "172.20.1.1/32"
+    peer_ip: "172.20.1.2"
     wireguard:
       listen_port: 51820
       private_key: "<base64-from-wg-genkey>"
-      address: "172.20.1.1/32"
       mtu: 1420
       public_key: "<base64-from-wg-pubkey>"
       endpoint: "peer.example.com:51820"
       allowed_ips: "172.20.1.2/32"
+    # ls:
+    #   remote_router_id: "172.20.2.1"
+    #   remote_asn: 4242420002
+    #   metric: 10
+    #   adj_sid: 24001
 
   - name: "internal"
+    address: "172.20.2.1/32"
+    peer_ip: "172.20.2.2"
     wireguard:
       listen_port: 51821
       private_key: "<base64-from-wg-genkey>"
-      address: "172.20.2.1/32"
       mtu: 1420
       public_key: "<base64-from-wg-pubkey>"
       endpoint: "internal.example.com:51821"

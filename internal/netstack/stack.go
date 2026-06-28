@@ -155,6 +155,28 @@ func (m *Manager) AddPeerRoute(nicName string, peerPrefix netip.Prefix, nextHop 
 	return nil
 }
 
+func (m *Manager) AddDefaultRoute(nicName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	nicID := tcpip.NICID(0)
+	for id, n := range m.nicNames {
+		if n == nicName {
+			nicID = id
+			break
+		}
+	}
+	if nicID == 0 {
+		return errors.New("nic not found")
+	}
+
+	m.stack.AddRoute(tcpip.Route{
+		Destination: header.IPv4EmptySubnet,
+		NIC:         nicID,
+	})
+	return nil
+}
+
 func (m *Manager) RemoveNIC(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -290,6 +312,7 @@ func (m *Manager) LocalAddresses() []netip.Prefix {
 }
 
 func (m *Manager) IsLocalAddress(addr netip.Addr) bool {
+
 	for _, pfx := range m.LocalAddresses() {
 		if pfx.Contains(addr) {
 			return true

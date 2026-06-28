@@ -71,6 +71,10 @@ func (r *Router) LFIB() *mpls.LFIB {
 	return r.lfib
 }
 
+func (r *Router) FIB() *FIB {
+	return r.fib
+}
+
 func (r *Router) Run(ctx context.Context) {
 	r.mu.RLock()
 	names := make([]string, 0, len(r.transports))
@@ -151,13 +155,10 @@ func (r *Router) handleIPPacket(pkt transport.Packet) {
 	}
 
 	if r.isLocal(dstIP) {
-		nicName, _ := r.nicForAddr(dstIP)
-		log.Printf(pkt.Transport, nicName)
-		if nicName == "" || nicName != pkt.Transport {
-			nicName = pkt.Transport
-		}
-		if err := r.netstack.InjectInbound(nicName, pkt.Data); err != nil {
-			log.Printf("router: inject failed: %v", err)
+		if nicName, ok := r.nicForAddr(dstIP); ok {
+			if err := r.netstack.InjectInbound(nicName, pkt.Data); err != nil {
+				log.Printf("router: inject failed: %v", err)
+			}
 		}
 		return
 	}
@@ -273,7 +274,6 @@ func (r *Router) forwardByFIB(pkt transport.Packet, entry *FIBEntry) {
 		if nicName == "" {
 			nicName = pkt.Transport
 		}
-		log.Printf("11111")
 		if err := r.netstack.InjectInbound(nicName, pkt.Data); err != nil {
 			log.Printf("router: inject failed: %v", err)
 		}

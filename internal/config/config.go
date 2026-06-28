@@ -34,11 +34,12 @@ type BGPPeer struct {
 }
 
 type RouteConfig struct {
-	Prefix   string   `yaml:"prefix"`
-	NextHop  string   `yaml:"next_hop"`
-	Export   bool     `yaml:"export"`
-	InLabel  uint32   `yaml:"in_label,omitempty"`
-	Labels   []uint32 `yaml:"labels,omitempty"`
+	Prefix  string   `yaml:"prefix"`
+	NextHop string   `yaml:"next_hop"`
+	Via     string   `yaml:"via,omitempty"`
+	Export  bool     `yaml:"export"`
+	InLabel uint32   `yaml:"in_label,omitempty"`
+	Labels  []uint32 `yaml:"labels,omitempty"`
 }
 
 type WireGuardConf struct {
@@ -71,19 +72,20 @@ type NetstackConf struct {
 
 type LinkConfig struct {
 	Name    string         `yaml:"name"`
+	Address string         `yaml:"address,omitempty"`
+	PeerIP  string         `yaml:"peer_ip,omitempty"`
 	WG      *WGLinkConfig  `yaml:"wireguard,omitempty"`
 	MPLSUDP *MPLSUDPLink   `yaml:"mpls_udp,omitempty"`
 	LS      *LinkLSConfig  `yaml:"ls,omitempty"`
 }
 
 type WGLinkConfig struct {
-	ListenPort         int    `yaml:"listen_port"`
-	PrivateKey         string `yaml:"private_key"`
-	Address            string `yaml:"address"`
-	MTU                int    `yaml:"mtu"`
-	PublicKey          string `yaml:"public_key"`
-	Endpoint           string `yaml:"endpoint,omitempty"`
-	AllowedIPs         string `yaml:"allowed_ips"`
+	ListenPort          int    `yaml:"listen_port"`
+	PrivateKey          string `yaml:"private_key"`
+	MTU                 int    `yaml:"mtu"`
+	PublicKey           string `yaml:"public_key"`
+	Endpoint            string `yaml:"endpoint,omitempty"`
+	AllowedIPs          string `yaml:"allowed_ips"`
 	PersistentKeepalive int    `yaml:"persistent_keepalive,omitempty"`
 }
 
