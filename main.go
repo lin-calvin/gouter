@@ -325,15 +325,15 @@ func collectLSFromLinks(cfg *config.Config) []bgp.LSLinkInfo {
 	return result
 }
 
-func applyRoute(r config.RouteConfig, fib *router.FIB, lfib *mpls.LFIB) {
-	prefix, err := netip.ParsePrefix(r.Prefix)
+func applyRoute(route config.RouteConfig, fib *router.FIB, lfib *mpls.LFIB) {
+	prefix, err := netip.ParsePrefix(route.Prefix)
 	if err != nil {
-		log.Printf("route: bad prefix %s: %v", r.Prefix, err)
+		log.Printf("route: bad prefix %s: %v", route.Prefix, err)
 		return
 	}
-	nh, err := netip.ParseAddr(r.NextHop)
+	nh, err := netip.ParseAddr(route.NextHop)
 	if err != nil {
-		log.Printf("route: bad nexthop %s: %v", r.NextHop, err)
+		log.Printf("route: bad nexthop %s: %v", route.NextHop, err)
 		return
 	}
 	nhForFIB := nh
@@ -341,44 +341,55 @@ func applyRoute(r config.RouteConfig, fib *router.FIB, lfib *mpls.LFIB) {
 		nhForFIB = netip.Addr{}
 	}
 
+	transport := route.Via
 	switch {
-	case r.InLabel > 0 && len(r.Labels) > 0:
+	case route.InLabel > 0 && len(route.Labels) > 0:
 		lfib.Add(mpls.LFIBEntry{
-			InLabel:   r.InLabel,
+			InLabel:   route.InLabel,
 			Op:        mpls.OpSwap,
-			OutLabels: r.Labels,
+			OutLabels: route.Labels,
 			NextHop:   nhForFIB,
-			Transport: r.Via,
+			Transport: transport,
 		})
-		log.Printf("route: LFIB %d→SWAP%v via %s (%s)", r.InLabel, r.Labels, nh, r.Prefix)
+		log.Printf("route: LFIB %d→SWAP%v via %s (%s)", route.InLabel, route.Labels, nh, route.Prefix)
 
-	case r.InLabel > 0:
+	case route.InLabel > 0:
 		lfib.Add(mpls.LFIBEntry{
-			InLabel:   r.InLabel,
+			InLabel:   route.InLabel,
 			Op:        mpls.OpPop,
 			NextHop:   nhForFIB,
-			Transport: r.Via,
+			Transport: transport,
 		})
-		log.Printf("route: LFIB %d→POP (%s)", r.InLabel, r.Prefix)
+		log.Printf("route: LFIB %d→POP (%s)", route.InLabel, route.Prefix)
 
-	case len(r.Labels) > 0:
+	case len(route.Labels) > 0:
+		if existing := fib.HasExact(prefix); existing != nil && existing.Transport != "" {
+			log.Printf("route: CONFLICT %s already in FIB via %s — remove from routes config and use link's peer_ip instead",
+				route.Prefix, existing.Transport)
+			return
+		}
 		fib.Add(router.FIBEntry{
 			Prefix:    prefix,
 			NextHop:   nhForFIB,
 			Action:    router.ActionPush,
-			OutLabels: r.Labels,
-			Transport: r.Via,
+			OutLabels: route.Labels,
+			Transport: transport,
 		})
-		log.Printf("route: FIB %s PUSH%v via %s", r.Prefix, r.Labels, nh)
+		log.Printf("route: FIB %s PUSH%v via %s", route.Prefix, route.Labels, nh)
 
 	default:
+		if existing := fib.HasExact(prefix); existing != nil && existing.Transport != "" {
+			log.Printf("route: CONFLICT %s already in FIB via %s — remove from routes config and use link's peer_ip instead",
+				route.Prefix, existing.Transport)
+			return
+		}
 		fib.Add(router.FIBEntry{
 			Prefix:    prefix,
 			NextHop:   nhForFIB,
 			Action:    router.ActionForward,
-			Transport: r.Via,
+			Transport: transport,
 		})
-		log.Printf("route: FIB %s via %s", r.Prefix, nh)
+		log.Printf("route: FIB %s via %s", route.Prefix, nh)
 	}
 }
 

@@ -59,6 +59,18 @@ func (f *FIB) Remove(prefix netip.Prefix) {
 	}
 }
 
+func (f *FIB) HasExact(prefix netip.Prefix) *FIBEntry {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	for i := range f.routes {
+		if f.routes[i].Prefix == prefix {
+			e := f.routes[i]
+			return &e
+		}
+	}
+	return nil
+}
+
 func (f *FIB) Lookup(addr netip.Addr) *FIBEntry {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
