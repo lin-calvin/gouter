@@ -64,15 +64,12 @@ func main() {
 			})
 		}
 
-		var localRoutes []bgp.LocalRoute
-		for _, lr := range cfg.BGP.LocalRoutes {
-			pfx, _ := netip.ParsePrefix(lr.Prefix)
-			nh, _ := netip.ParseAddr(lr.NextHop)
-			localRoutes = append(localRoutes, bgp.LocalRoute{
-				Prefix:  pfx,
-				NextHop: nh,
-				Label:   lr.Label,
-			})
+		var exportRoutes []config.RouteConfig
+		for _, r := range cfg.Routes {
+			applyRoute(r, fib, lfib)
+			if r.Export {
+				exportRoutes = append(exportRoutes, r)
+			}
 		}
 
 		speaker := bgp.NewSpeaker(bgp.SpeakerConfig{
@@ -80,30 +77,13 @@ func main() {
 			RouterID:     cfg.BGP.RouterID,
 			ImportFilter: cfg.BGP.ImportFilter,
 			Peers:        bgpPeers,
-			LocalRoutes:  localRoutes,
+			ExportRoutes: exportRoutes,
 			LSLinks:      lsLinks,
 		}, fib, lfib, ns)
 		if err := speaker.Start(ctx); err != nil {
 			log.Fatalf("bgp: %v", err)
 		}
 		defer speaker.Stop()
-
-		// Apply static SR policies from config
-		for _, sp := range cfg.BGP.SRPolicies {
-			endp, err := netip.ParseAddr(sp.Endpoint)
-			if err != nil {
-				log.Printf("sr-policy: bad endpoint %s: %v", sp.Endpoint, err)
-				continue
-			}
-			fib.Add(router.FIBEntry{
-				Prefix:    netip.PrefixFrom(endp, 32),
-				NextHop:   endp,
-				Action:    router.ActionPush,
-				OutLabels: sp.Segments,
-				Transport: "",
-			})
-			log.Printf("sr-policy: endpoint=%s color=%d segments=%v", sp.Endpoint, sp.Color, sp.Segments)
-		}
 	}
 
 	// Local TCP listener via netstack
@@ -300,6 +280,67 @@ func collectLSFromLinks(cfg *config.Config) []bgp.LSLinkInfo {
 		})
 	}
 	return result
+}
+
+func applyRoute(r config.RouteConfig, fib *router.FIB, lfib *mpls.LFIB) {
+	prefix, err := netip.ParsePrefix(r.Prefix)
+	if err != nil {
+		log.Printf("route: bad prefix %s: %v", r.Prefix, err)
+		return
+	}
+	nh, err := netip.ParseAddr(r.NextHop)
+	if err != nil {
+		log.Printf("route: bad nexthop %s: %v", r.NextHop, err)
+		return
+	}
+	nhForFIB := nh
+	if !nh.IsValid() {
+		nhForFIB = netip.Addr{}
+	}
+
+	switch {
+	case r.InLabel > 0 && len(r.Labels) > 0:
+		// Label → SWAP
+		lfib.Add(mpls.LFIBEntry{
+			InLabel:   r.InLabel,
+			Op:        mpls.OpSwap,
+			OutLabels: r.Labels,
+			NextHop:   nhForFIB,
+			Transport: "",
+		})
+		log.Printf("route: LFIB %d→SWAP%v via %s (%s)", r.InLabel, r.Labels, nh, r.Prefix)
+
+	case r.InLabel > 0:
+		// Label → POP
+		lfib.Add(mpls.LFIBEntry{
+			InLabel:   r.InLabel,
+			Op:        mpls.OpPop,
+			NextHop:   nhForFIB,
+			Transport: "",
+		})
+		log.Printf("route: LFIB %d→POP (%s)", r.InLabel, r.Prefix)
+
+	case len(r.Labels) > 0:
+		// IP → PUSH
+		fib.Add(router.FIBEntry{
+			Prefix:    prefix,
+			NextHop:   nhForFIB,
+			Action:    router.ActionPush,
+			OutLabels: r.Labels,
+			Transport: "",
+		})
+		log.Printf("route: FIB %s PUSH%v via %s", r.Prefix, r.Labels, nh)
+
+	default:
+		// IP Forward
+		fib.Add(router.FIBEntry{
+			Prefix:    prefix,
+			NextHop:   nhForFIB,
+			Action:    router.ActionForward,
+			Transport: "",
+		})
+		log.Printf("route: FIB %s via %s", r.Prefix, nh)
+	}
 }
 
 func handleOutbound(ctx context.Context, ns *netstack.Manager, name string, t transport.Transport) {

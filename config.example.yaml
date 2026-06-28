@@ -1,7 +1,7 @@
 bgp:
   asn: 4242420001
   router_id: "172.20.1.1"
-  # import_filter:                   # optional, accept all if not set
+  # import_filter:
   #   - "172.20.0.0/14"
   #   - "172.31.0.0/16"
   #   - "fd00::/8"
@@ -12,15 +12,34 @@ bgp:
       families: [ipv4-unicast, ipv6-unicast]
     - name: "internal-1"
       address: "172.20.2.2"
-      asn: 4242420001               # iBGP (same AS)
+      asn: 4242420001
       families: [ipv4-unicast, ipv4-labelled-unicast]
-  local_routes:
-    - prefix: "172.20.1.0/24"
-      next_hop: "172.20.1.1"
-  # sr_policies:
-  #   - endpoint: "172.20.2.1"
-  #     color: 100
-  #     segments: [16001, 16002]
+
+routes:
+  # IP Forward (export to BGP)
+  - prefix: "172.20.1.0/24"
+    next_hop: "172.20.1.1"
+    export: true
+  # IP Forward (FIB only)
+  - prefix: "172.20.2.1/32"
+    next_hop: "172.20.2.1"
+    export: false
+  # IP → PUSH MPLS labels (SR-Policy ingress)
+  # - prefix: "172.20.3.1/32"
+  #   next_hop: "172.20.1.2"
+  #   labels: [16001, 16002, 16003]
+  #   export: false
+  # Label → POP (BGP-LU egress)
+  # - prefix: "172.20.1.0/24"
+  #   next_hop: "172.20.1.1"
+  #   in_label: 16
+  #   export: true
+  # Label → SWAP (transit)
+  # - prefix: "172.20.4.1/32"
+  #   next_hop: "172.20.2.2"
+  #   in_label: 100
+  #   labels: [200]
+  #   export: false
 
 links:
   - name: "peer1"
@@ -32,11 +51,6 @@ links:
       public_key: "<base64-from-wg-pubkey>"
       endpoint: "peer.example.com:51820"
       allowed_ips: "172.20.1.2/32"
-    # ls:                              # optional BGP-LS advertisement
-    #   remote_router_id: "172.20.2.1"
-    #   remote_asn: 4242420002
-    #   metric: 10
-    #   adj_sid: 24001
 
   - name: "internal"
     wireguard:
@@ -47,20 +61,6 @@ links:
       public_key: "<base64-from-wg-pubkey>"
       endpoint: "internal.example.com:51821"
       allowed_ips: "172.20.2.2/32"
-
-  # - name: "mpls-trunk"
-  #   mpls_udp:
-  #     listen_port: 16635
-  #     peers: ["peer.example.com:16635"]
-  #   ls:
-  #     remote_router_id: "172.20.4.1"
-  #     remote_asn: 4242420004
-  #     metric: 100
-  #     adj_sid: 24100
-
-mpls:                                 # optional: SRGB, used with BGP-LS
-  srgb_start: 16000
-  srgb_end: 23999
 
 netstack:
   tcp_port: 8080

@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"gouter/internal/config"
 	"gouter/internal/mpls"
 	"gouter/internal/netstack"
 	"gouter/internal/router"
@@ -31,16 +32,10 @@ type LSLinkInfo struct {
 
 type PeerConfig struct {
 	Name        string
-	Address     string   // peer's WG IP (e.g. 10.0.1.2)
+	Address     string
 	ASN         uint32
-	PeerBGPPort uint16   // peer's BGP listen port (default 179)
-	Families    []string // e.g. ["ipv4-unicast", "ipv4-labelled-unicast"]
-}
-
-type LocalRoute struct {
-	Prefix  netip.Prefix
-	NextHop netip.Addr
-	Label   bool
+	PeerBGPPort uint16
+	Families    []string
 }
 
 type SpeakerConfig struct {
@@ -48,8 +43,8 @@ type SpeakerConfig struct {
 	RouterID     string
 	ImportFilter []string
 	Peers        []PeerConfig
-	LocalRoutes  []LocalRoute
-	LSLinks      []LSLinkInfo     // BGP-LS link advertisements
+	ExportRoutes []config.RouteConfig
+	LSLinks      []LSLinkInfo
 }
 
 type Speaker struct {
@@ -111,9 +106,9 @@ func (s *Speaker) Start(ctx context.Context) error {
 		return fmt.Errorf("start inbound proxy: %w", err)
 	}
 
-	for _, r := range s.cfg.LocalRoutes {
-		if err := s.addLocalRoute(r); err != nil {
-			log.Printf("bgp: add local route %s: %v", r.Prefix, err)
+	for _, r := range s.cfg.ExportRoutes {
+		if err := s.addLocalRoute(ctx, r); err != nil {
+			log.Printf("bgp: add export route %s: %v", r.Prefix, err)
 		}
 	}
 
@@ -203,31 +198,32 @@ func (s *Speaker) setupGlobalNexthop(ctx context.Context) error {
 	}})
 }
 
-func (s *Speaker) addLocalRoute(r LocalRoute) error {
+func (s *Speaker) addLocalRoute(ctx context.Context, r config.RouteConfig) error {
+	prefix, err := netip.ParsePrefix(r.Prefix)
+	if err != nil {
+		return err
+	}
+	nh, err := netip.ParseAddr(r.NextHop)
+	if err != nil {
+		return err
+	}
+
 	var family bgp.Family
 	var nlri bgp.NLRI
-	var err error
 
-	if r.Label {
+	if r.InLabel > 0 {
 		family = bgp.RF_IPv4_MPLS
-		label := s.lfib.Allocate()
-		nlri, err = bgp.NewLabeledIPAddrPrefix(r.Prefix, *bgp.NewMPLSLabelStack(label))
-		routerID, _ := netip.ParseAddr(s.cfg.RouterID)
-		s.lfib.Add(mpls.LFIBEntry{
-			InLabel: label,
-			Op:      mpls.OpPop,
-			NextHop: routerID,
-		})
-		log.Printf("bgp-lu: local label %d → pop → %s", label, r.Prefix)
+		nlri, err = bgp.NewLabeledIPAddrPrefix(prefix, *bgp.NewMPLSLabelStack(r.InLabel))
+		log.Printf("bgp-lu: export %s via %s label=%d", prefix, nh, r.InLabel)
 	} else {
 		family = bgp.RF_IPv4_UC
-		nlri, err = bgp.NewIPAddrPrefix(r.Prefix)
+		nlri, err = bgp.NewIPAddrPrefix(prefix)
 	}
 	if err != nil {
 		return err
 	}
 
-	nh, err := bgp.NewPathAttributeNextHop(r.NextHop)
+	nhAttr, err := bgp.NewPathAttributeNextHop(nh)
 	if err != nil {
 		return err
 	}
@@ -236,7 +232,7 @@ func (s *Speaker) addLocalRoute(r LocalRoute) error {
 	p := &apiutil.Path{
 		Family: family,
 		Nlri:   nlri,
-		Attrs:  []bgp.PathAttributeInterface{origin, nh},
+		Attrs:  []bgp.PathAttributeInterface{origin, nhAttr},
 	}
 
 	_, err = s.server.AddPath(apiutil.AddPathRequest{
