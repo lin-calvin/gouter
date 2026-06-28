@@ -70,6 +70,17 @@ func main() {
 				exportRoutes = append(exportRoutes, r)
 			}
 		}
+		for _, link := range cfg.Links {
+			if link.PeerIP != "" {
+				if peerIP, err := netip.ParseAddr(link.PeerIP); err == nil {
+					exportRoutes = append(exportRoutes, config.RouteConfig{
+						Prefix:  netip.PrefixFrom(peerIP, 32).String(),
+						NextHop: link.PeerIP,
+						Export:  true,
+					})
+				}
+			}
+		}
 
 		speaker := bgp.NewSpeaker(bgp.SpeakerConfig{
 			ASN:          cfg.BGP.ASN,
