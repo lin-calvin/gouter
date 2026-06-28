@@ -214,9 +214,6 @@ func setupLinkWG(ctx context.Context, ns *netstack.Manager, nexthop *router.Next
 			prefixes = append(prefixes, pfx)
 		}
 	}
-	if allowed, err := netip.ParsePrefix(wgCfg.AllowedIPs); err == nil {
-		prefixes = append(prefixes, allowed)
-	}
 	if link.PeerIP != "" {
 		if peerIP, err := netip.ParseAddr(link.PeerIP); err == nil {
 			peerPrefix := netip.PrefixFrom(peerIP, 32)
@@ -276,11 +273,6 @@ func setupOldWG(ctx context.Context, cfg *config.Config, ns *netstack.Manager, n
 	addrPrefix, _ := netip.ParsePrefix(wgCfg.Address)
 	ns.AddNIC(netstack.NICConfig{Name: wgCfg.Name, Address: addrPrefix, MTU: 1500})
 	prefixes := []netip.Prefix{addrPrefix}
-	for _, p := range wgCfg.Peers {
-		if allowed, err := netip.ParsePrefix(p.AllowedIPs); err == nil {
-			prefixes = append(prefixes, allowed)
-		}
-	}
 	nexthop.AddTransport(wgCfg.Name, prefixes)
 	t.Up()
 	r.AddTransport(t)

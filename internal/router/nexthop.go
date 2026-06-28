@@ -25,12 +25,18 @@ func (r *NexthopResolver) RemoveTransport(name string) {
 }
 
 func (r *NexthopResolver) Resolve(nexthop netip.Addr) (transportName string, found bool) {
+	var best string
+	bestLen := -1
 	for name, prefixes := range r.transportIPs {
 		for _, pfx := range prefixes {
-			if pfx.Contains(nexthop) {
-				return name, true
+			if pfx.Contains(nexthop) && pfx.Bits() > bestLen {
+				bestLen = pfx.Bits()
+				best = name
 			}
 		}
+	}
+	if bestLen >= 0 {
+		return best, true
 	}
 
 	entry := r.fib.Lookup(nexthop)
