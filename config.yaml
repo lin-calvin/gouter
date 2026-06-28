@@ -13,7 +13,7 @@ routes:
     export: true
   - prefix: "172.22.138.39/32"
     next_hop: "172.22.138.38"
-    export: false
+    export: true
 
 links:
   - name: "server"
@@ -25,6 +25,14 @@ links:
       public_key: "k4xhSZSjptZXhp+gKzvIUomjVE+dLhEb4IqlEvBjpHA="
       endpoint: "100.64.0.1:51821"
       allowed_ips: "172.16.0.0/12"
-
+  - name: "mihomo"
+    wireguard:
+      listen_port: 51821
+      public_key: "Ft2q7p4URakCRGz4Z/j/3hDyo0PfVmTL+XooC9VLgxA="
+      private_key: "iNTM45kC8wo5MAcdziritJ8XsC28XKNbSAQQwuVh1lk="
+      mtu: 1420
+      address: "172.22.138.38/32"
+      allowed_ips: "172.16.0.0/12"
+      #endpoint: "100.64.0.3:51801"
 netstack:
   tcp_port: 8080

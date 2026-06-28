@@ -63,6 +63,10 @@ func (r *Router) SetProcessor(p PacketProcessor) {
 	r.processor = p
 }
 
+func (r *Router) ForwardFromNetstack(pkt transport.Packet) {
+	r.handlePacket(pkt)
+}
+
 func (r *Router) LFIB() *mpls.LFIB {
 	return r.lfib
 }
@@ -107,7 +111,6 @@ func (r *Router) handlePacket(pkt transport.Packet) {
 	r.mu.RLock()
 	proc := r.processor
 	r.mu.RUnlock()
-
 	processed := proc.Process(pkt.Data)
 	if processed == nil {
 		return
@@ -128,6 +131,7 @@ func (r *Router) handleIPPacket(pkt transport.Packet) {
 	}
 
 	var dstIP netip.Addr
+	ttlIdx := -1
 	version := pkt.Data[0] >> 4
 	switch version {
 	case 4:
@@ -135,17 +139,20 @@ func (r *Router) handleIPPacket(pkt transport.Packet) {
 			return
 		}
 		dstIP, _ = netip.AddrFromSlice(pkt.Data[16:20])
+		ttlIdx = 8
 	case 6:
 		if len(pkt.Data) < 40 {
 			return
 		}
 		dstIP, _ = netip.AddrFromSlice(pkt.Data[24:40])
+		ttlIdx = 7
 	default:
 		return
 	}
 
 	if r.isLocal(dstIP) {
 		nicName, _ := r.nicForAddr(dstIP)
+		log.Printf(pkt.Transport, nicName)
 		if nicName == "" || nicName != pkt.Transport {
 			nicName = pkt.Transport
 		}
@@ -153,6 +160,20 @@ func (r *Router) handleIPPacket(pkt transport.Packet) {
 			log.Printf("router: inject failed: %v", err)
 		}
 		return
+	}
+
+	if ttlIdx >= 0 {
+		pkt.Data[ttlIdx]--
+		if pkt.Data[ttlIdx] == 0 {
+			return
+		}
+		if version == 4 {
+			pkt.Data[10] = 0
+			pkt.Data[11] = 0
+			cs := checksum(pkt.Data[:20])
+			pkt.Data[10] = byte(cs >> 8)
+			pkt.Data[11] = byte(cs)
+		}
 	}
 
 	entry := r.fib.Lookup(dstIP)
@@ -243,7 +264,6 @@ func (r *Router) forwardByFIB(pkt transport.Packet, entry *FIBEntry) {
 	if transportName == "" && pkt.Transport != "" {
 		transportName = pkt.Transport
 	}
-
 	switch entry.Action {
 	case ActionLocal:
 		nicName := entry.Transport
@@ -253,6 +273,7 @@ func (r *Router) forwardByFIB(pkt transport.Packet, entry *FIBEntry) {
 		if nicName == "" {
 			nicName = pkt.Transport
 		}
+		log.Printf("11111")
 		if err := r.netstack.InjectInbound(nicName, pkt.Data); err != nil {
 			log.Printf("router: inject failed: %v", err)
 		}
@@ -281,4 +302,18 @@ func (r *Router) forwardByFIB(pkt transport.Packet, entry *FIBEntry) {
 			log.Printf("router: write to %s failed: %v", transportName, err)
 		}
 	}
+}
+
+func checksum(data []byte) uint16 {
+	sum := uint32(0)
+	for i := 0; i < len(data)-1; i += 2 {
+		sum += uint32(data[i])<<8 | uint32(data[i+1])
+	}
+	if len(data)%2 == 1 {
+		sum += uint32(data[len(data)-1]) << 8
+	}
+	for sum>>16 > 0 {
+		sum = (sum & 0xffff) + (sum >> 16)
+	}
+	return ^uint16(sum)
 }

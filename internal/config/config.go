@@ -77,13 +77,14 @@ type LinkConfig struct {
 }
 
 type WGLinkConfig struct {
-	ListenPort int    `yaml:"listen_port"`
-	PrivateKey string `yaml:"private_key"`
-	Address    string `yaml:"address"`
-	MTU        int    `yaml:"mtu"`
-	PublicKey  string `yaml:"public_key"`
-	Endpoint   string `yaml:"endpoint"`
-	AllowedIPs string `yaml:"allowed_ips"`
+	ListenPort         int    `yaml:"listen_port"`
+	PrivateKey         string `yaml:"private_key"`
+	Address            string `yaml:"address"`
+	MTU                int    `yaml:"mtu"`
+	PublicKey          string `yaml:"public_key"`
+	Endpoint           string `yaml:"endpoint,omitempty"`
+	AllowedIPs         string `yaml:"allowed_ips"`
+	PersistentKeepalive int    `yaml:"persistent_keepalive,omitempty"`
 }
 
 type MPLSUDPLink struct {

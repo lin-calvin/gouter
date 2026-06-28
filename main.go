@@ -16,7 +16,6 @@ import (
 	"gouter/internal/mpls"
 	"gouter/internal/netstack"
 	"gouter/internal/router"
-	"gouter/internal/transport"
 	"gouter/internal/wg"
 
 	"golang.zx2c4.com/wireguard/device"
@@ -172,8 +171,14 @@ func setupLinkWG(ctx context.Context, ns *netstack.Manager, nexthop *router.Next
 	if err != nil {
 		log.Fatalf("%s: bad public key: %v", name, err)
 	}
-	uapi := fmt.Sprintf("private_key=%s\nlisten_port=%d\nreplace_peers=true\npublic_key=%s\nendpoint=%s\nreplace_allowed_ips=true\nallowed_ip=%s\n",
-		skHex, wgCfg.ListenPort, pkHex, wgCfg.Endpoint, wgCfg.AllowedIPs)
+	uapi := fmt.Sprintf("private_key=%s\nlisten_port=%d\nreplace_peers=true\npublic_key=%s\nreplace_allowed_ips=true\nallowed_ip=%s\n",
+		skHex, wgCfg.ListenPort, pkHex, wgCfg.AllowedIPs)
+	if wgCfg.Endpoint != "" {
+		uapi += fmt.Sprintf("endpoint=%s\n", wgCfg.Endpoint)
+	}
+	if wgCfg.PersistentKeepalive > 0 {
+		uapi += fmt.Sprintf("persistent_keepalive_interval=%d\n", wgCfg.PersistentKeepalive)
+	}
 	if err := t.Configure(uapi); err != nil {
 		log.Fatalf("%s: configure: %v", name, err)
 	}
@@ -185,17 +190,19 @@ func setupLinkWG(ctx context.Context, ns *netstack.Manager, nexthop *router.Next
 	if err != nil {
 		log.Fatalf("add nic %s: %v", name, err)
 	}
-	nexthop.AddTransport(name, []netip.Prefix{addrPrefix})
+	prefixes := []netip.Prefix{addrPrefix}
 	if allowed, err := netip.ParsePrefix(wgCfg.AllowedIPs); err == nil {
+		prefixes = append(prefixes, allowed)
 		ns.AddPeerRoute(name, allowed, netip.Addr{})
 	} else {
 		log.Printf("%s: bad allowed_ips: %v", name, err)
 	}
+	nexthop.AddTransport(name, prefixes)
 	if err := t.Up(); err != nil {
 		log.Fatalf("%s up: %v", name, err)
 	}
 	r.AddTransport(t)
-	go handleOutbound(ctx, ns, name, t)
+	go handleOutbound(ctx, ns, name, r)
 	log.Printf("wg %s: %s :%d", name, wgCfg.Address, wgCfg.ListenPort)
 }
 
@@ -209,9 +216,15 @@ func setupLinkMPLS(ctx context.Context, ns *netstack.Manager, nexthop *router.Ne
 	}
 	mplsNIC := netip.MustParsePrefix("10.255.255.1/32")
 	ns.AddNIC(netstack.NICConfig{Name: name, Address: mplsNIC, MTU: 1500})
-	nexthop.AddTransport(name, []netip.Prefix{mplsNIC})
+	prefixes := []netip.Prefix{mplsNIC}
+	for _, peer := range mp.Peers {
+		if pa, err := netip.ParseAddrPort(peer); err == nil {
+			prefixes = append(prefixes, netip.PrefixFrom(pa.Addr(), 32))
+		}
+	}
+	nexthop.AddTransport(name, prefixes)
 	r.AddTransport(mplsT)
-	go handleOutbound(ctx, ns, name, mplsT)
+	go handleOutbound(ctx, ns, name, r)
 	log.Printf("mpls/udp %s: :%d peers=%d", name, mp.ListenPort, len(mp.Peers))
 }
 
@@ -234,15 +247,17 @@ func setupOldWG(ctx context.Context, cfg *config.Config, ns *netstack.Manager, n
 	}
 	addrPrefix, _ := netip.ParsePrefix(wgCfg.Address)
 	ns.AddNIC(netstack.NICConfig{Name: wgCfg.Name, Address: addrPrefix, MTU: 1500})
-	nexthop.AddTransport(wgCfg.Name, []netip.Prefix{addrPrefix})
+	prefixes := []netip.Prefix{addrPrefix}
 	for _, p := range wgCfg.Peers {
 		if allowed, err := netip.ParsePrefix(p.AllowedIPs); err == nil {
+			prefixes = append(prefixes, allowed)
 			ns.AddPeerRoute(wgCfg.Name, allowed, netip.Addr{})
 		}
 	}
+	nexthop.AddTransport(wgCfg.Name, prefixes)
 	t.Up()
 	r.AddTransport(t)
-	go handleOutbound(ctx, ns, wgCfg.Name, t)
+	go handleOutbound(ctx, ns, wgCfg.Name, r)
 	log.Printf("wg %s: %s :%d", wgCfg.Name, wgCfg.Address, wgCfg.ListenPort)
 }
 
@@ -256,9 +271,15 @@ func setupOldMPLS(ctx context.Context, cfg *config.Config, ns *netstack.Manager,
 	}
 	mplsNIC := netip.MustParsePrefix("10.255.255.1/32")
 	ns.AddNIC(netstack.NICConfig{Name: "mpls-udp", Address: mplsNIC, MTU: 1500})
-	nexthop.AddTransport("mpls-udp", []netip.Prefix{mplsNIC})
+	prefixes := []netip.Prefix{mplsNIC}
+	for _, peer := range mp.UDP.Peers {
+		if pa, err := netip.ParseAddrPort(peer); err == nil {
+			prefixes = append(prefixes, netip.PrefixFrom(pa.Addr(), 32))
+		}
+	}
+	nexthop.AddTransport("mpls-udp", prefixes)
 	r.AddTransport(mplsT)
-	go handleOutbound(ctx, ns, "mpls-udp", mplsT)
+	go handleOutbound(ctx, ns, "mpls-udp", r)
 	log.Printf("mpls/udp: :%d peers=%d", mp.UDP.ListenPort, len(mp.UDP.Peers))
 }
 
@@ -343,7 +364,7 @@ func applyRoute(r config.RouteConfig, fib *router.FIB, lfib *mpls.LFIB) {
 	}
 }
 
-func handleOutbound(ctx context.Context, ns *netstack.Manager, name string, t transport.Transport) {
+func handleOutbound(ctx context.Context, ns *netstack.Manager, name string, r *router.Router) {
 	ch := ns.GetNICOutChannel(ctx, name)
 	if ch == nil {
 		return
@@ -356,9 +377,7 @@ func handleOutbound(ctx context.Context, ns *netstack.Manager, name string, t tr
 			if !ok {
 				return
 			}
-			if err := t.Write(pkt); err != nil {
-				log.Printf("outbound %s: %v", name, err)
-			}
+			r.ForwardFromNetstack(pkt)
 		}
 	}
 }
