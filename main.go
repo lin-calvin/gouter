@@ -78,6 +78,7 @@ func main() {
 			Peers:        bgpPeers,
 			ExportRoutes: exportRoutes,
 			LSLinks:      lsLinks,
+			ResolveNH:    nexthop.Resolve,
 		}, fib, lfib, ns)
 		if err := speaker.Start(ctx); err != nil {
 			log.Fatalf("bgp: %v", err)

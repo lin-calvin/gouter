@@ -45,6 +45,7 @@ type SpeakerConfig struct {
 	Peers        []PeerConfig
 	ExportRoutes []config.RouteConfig
 	LSLinks      []LSLinkInfo
+	ResolveNH    func(netip.Addr) (string, bool)
 }
 
 type Speaker struct {
@@ -268,7 +269,7 @@ func (s *Speaker) handleUnicastPath(p *apiutil.Path) {
 			Prefix:    prefix,
 			NextHop:   nextHop,
 			Action:    router.ActionForward,
-			Transport: "",
+			Transport: s.resolveTransport(nextHop),
 		})
 		s.routeCount++
 		if os.Getenv("GOUTER_VERBOSE_ROUTE") != "" || s.routeCount <= 10 || s.routeCount%500 == 0 {
@@ -304,7 +305,7 @@ func (s *Speaker) handleLabeledPath(p *apiutil.Path) {
 			NextHop:   nextHop,
 			Action:    router.ActionPush,
 			OutLabels: labels,
-			Transport: "",
+			Transport: s.resolveTransport(nextHop),
 		})
 		log.Printf("bgp-lu: learned %s via %s label=%d", prefix, nextHop, label)
 	}
@@ -485,6 +486,14 @@ func familyFromString(s string) *api.Family {
 	default:
 		return nil
 	}
+}
+
+func (s *Speaker) resolveTransport(nh netip.Addr) string {
+	if s.cfg.ResolveNH != nil {
+		t, _ := s.cfg.ResolveNH(nh)
+		return t
+	}
+	return ""
 }
 
 func extractUnicastInfo(p *apiutil.Path) (prefix netip.Prefix, nextHop netip.Addr, ok bool) {
