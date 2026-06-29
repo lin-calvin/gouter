@@ -1,3 +1,4 @@
+# ipv6: false                       # global switch, default true
 bgp:
   asn: 4242420001
   router_id: "172.20.1.1"

@@ -15,6 +15,7 @@ type Config struct {
 	MPLS      *MPLSConfig     `yaml:"mpls"`
 	Links     []LinkConfig    `yaml:"links"`
 	Routes    []RouteConfig   `yaml:"routes"`
+	IPv6      *bool           `yaml:"ipv6"`
 	Netstack  NetstackConf    `yaml:"netstack"`
 }
 
@@ -69,8 +70,7 @@ type MPLSUDP struct {
 }
 
 type NetstackConf struct {
-	TCPPort int    `yaml:"tcp_port"`
-	IPv6    *bool  `yaml:"ipv6"`
+	TCPPort int `yaml:"tcp_port"`
 }
 
 type LinkConfig struct {
@@ -123,9 +123,9 @@ func Load(path string) (*Config, error) {
 	if cfg.Netstack.TCPPort == 0 {
 		cfg.Netstack.TCPPort = 8080
 	}
-	if cfg.Netstack.IPv6 == nil {
+	if cfg.IPv6 == nil {
 		t := true
-		cfg.Netstack.IPv6 = &t
+		cfg.IPv6 = &t
 	}
 	for i := range cfg.WireGuard {
 		if cfg.WireGuard[i].MTU == 0 {
@@ -141,7 +141,7 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-func (n NetstackConf) IPv6Enabled() bool { return n.IPv6 != nil && *n.IPv6 }
+func (c Config) IPv6Enabled() bool { return c.IPv6 != nil && *c.IPv6 }
 
 func B64ToHex(s string) (string, error) {
 	b, err := base64.StdEncoding.DecodeString(s)
