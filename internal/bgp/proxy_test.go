@@ -11,7 +11,7 @@ import (
 )
 
 func TestProxyManagerCreateProxy(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	pm := NewProxyManager(ns, 179, netip.Addr{}, 0)
 	defer pm.Close()
 
@@ -44,7 +44,7 @@ func TestProxyManagerCreateProxy(t *testing.T) {
 }
 
 func TestProxyManagerMultiplePeers(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	pm := NewProxyManager(ns, 179, netip.Addr{}, 0)
 	defer pm.Close()
 
@@ -83,7 +83,7 @@ func TestProxyManagerMultiplePeers(t *testing.T) {
 }
 
 func TestProxyManagerListener(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	pm := NewProxyManager(ns, 179, netip.Addr{}, 0)
 	defer pm.Close()
 

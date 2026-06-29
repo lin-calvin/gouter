@@ -92,7 +92,17 @@ func (pm *ProxyManager) CreateProxy(name string, peerAddr netip.Addr, peerPort u
 }
 
 func (pm *ProxyManager) StartInbound(ctx context.Context) error {
-	return nil  // disabled: outbound-only avoids connection loop
+	v4ln, v6ln, err := pm.ns.ListenTCPv4v6(179)
+	if err != nil {
+		return err
+	}
+	pm.inboundLns = []net.Listener{v4ln}
+	go pm.runInbound(ctx, v4ln)
+	if v6ln != nil {
+		pm.inboundLns = append(pm.inboundLns, v6ln)
+		go pm.runInbound(ctx, v6ln)
+	}
+	return nil
 }
 
 func (pm *ProxyManager) runOutbound(ln net.Listener, proxy *PeerProxy) {
@@ -135,11 +145,10 @@ func (pm *ProxyManager) runInbound(ctx context.Context, ln net.Listener) {
 }
 
 func (pm *ProxyManager) handleInbound(peerConn net.Conn) {
-	defer peerConn.Close()
-
 	remoteIP, err := netip.ParseAddrPort(peerConn.RemoteAddr().String())
 	if err != nil {
 		log.Printf("proxy: parse remote %s: %v", peerConn.RemoteAddr(), err)
+		peerConn.Close()
 		return
 	}
 
@@ -148,6 +157,7 @@ func (pm *ProxyManager) handleInbound(peerConn net.Conn) {
 	pm.mu.Unlock()
 	if !ok {
 		log.Printf("proxy: unknown peer %s, dropping", remoteIP.Addr())
+		peerConn.Close()
 		return
 	}
 
@@ -158,12 +168,15 @@ func (pm *ProxyManager) handleInbound(peerConn net.Conn) {
 	kernelConn, err := dialer.Dial("tcp", gobgpAddr)
 	if err != nil {
 		log.Printf("proxy[%s]: dial gobgp: %v", proxy.Name, err)
+		peerConn.Close()
 		return
 	}
 	defer kernelConn.Close()
 
 	log.Printf("proxy[%s]: inbound %s → gobgp", proxy.Name, remoteIP.Addr())
-	pipe(kernelConn, peerConn)
+	// Don't close peerConn on gobgp collision — let the peer handle it
+	go io.Copy(peerConn, kernelConn)
+	io.Copy(kernelConn, peerConn)
 }
 
 func (pm *ProxyManager) Close() {

@@ -48,7 +48,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := router.NewFIB()
 	nexthop := router.NewNexthopResolver(fib)
 	r := router.NewRouter(fib, nexthop, ns, nil)

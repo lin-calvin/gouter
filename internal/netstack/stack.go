@@ -29,24 +29,23 @@ type NICConfig struct {
 }
 
 type Manager struct {
-	stack     *stack.Stack
-	nics      map[string]*channel.Endpoint
-	nicNames  map[tcpip.NICID]string
-	nicByAddr map[netip.Prefix]string
-	nextNICID tcpip.NICID
-	mu        sync.Mutex
+	stack      *stack.Stack
+	nics       map[string]*channel.Endpoint
+	nicNames   map[tcpip.NICID]string
+	nicByAddr  map[netip.Prefix]string
+	nextNICID  tcpip.NICID
+	enableIPv6 bool
+	mu         sync.Mutex
 }
 
-func NewManager() *Manager {
+func NewManager(enableIPv6 bool) *Manager {
+	protos := []stack.NetworkProtocolFactory{ipv4.NewProtocol}
+	if enableIPv6 {
+		protos = append(protos, ipv6.NewProtocol)
+	}
 	s := stack.New(stack.Options{
-		NetworkProtocols: []stack.NetworkProtocolFactory{
-			ipv4.NewProtocol,
-			ipv6.NewProtocol,
-		},
-		TransportProtocols: []stack.TransportProtocolFactory{
-			tcp.NewProtocol,
-			udp.NewProtocol,
-		},
+		NetworkProtocols:   protos,
+		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol},
 	})
 	return &Manager{
 		stack:     s,
@@ -54,6 +53,7 @@ func NewManager() *Manager {
 		nicNames:  make(map[tcpip.NICID]string),
 		nicByAddr: make(map[netip.Prefix]string),
 		nextNICID: 1,
+		enableIPv6: enableIPv6,
 	}
 }
 
@@ -275,10 +275,8 @@ func (m *Manager) ListenTCPv4v6(port uint16) (v4, v6 net.Listener, err error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	v6, err = m.ListenTCPProto(port, header.IPv6ProtocolNumber)
-	if err != nil {
-		// IPv6 listener is optional — v4-only is fine
-		return v4, nil, nil
+	if m.enableIPv6 {
+		v6, err = m.ListenTCPProto(port, header.IPv6ProtocolNumber)
 	}
 	return v4, v6, nil
 }

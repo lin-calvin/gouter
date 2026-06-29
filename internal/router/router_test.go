@@ -12,7 +12,7 @@ import (
 )
 
 func TestRouterIPForwarding(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := NewFIB()
 	nexthop := NewNexthopResolver(fib)
 	lfib := mpls.NewLFIB()
@@ -68,7 +68,7 @@ func TestRouterIPForwarding(t *testing.T) {
 }
 
 func TestRouterLocalDelivery(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := NewFIB()
 	nexthop := NewNexthopResolver(fib)
 	lfib := mpls.NewLFIB()
@@ -104,7 +104,7 @@ func TestRouterLocalDelivery(t *testing.T) {
 }
 
 func TestRouterMPLSRouting(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := NewFIB()
 	nexthop := NewNexthopResolver(fib)
 	lfib := mpls.NewLFIB()
@@ -148,7 +148,7 @@ func TestRouterMPLSRouting(t *testing.T) {
 }
 
 func TestRouterMPLSPopThenIPForward(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := NewFIB()
 	nexthop := NewNexthopResolver(fib)
 	lfib := mpls.NewLFIB()
@@ -198,7 +198,7 @@ func TestRouterMPLSPopThenIPForward(t *testing.T) {
 }
 
 func TestRouterFIBPushMPLS(t *testing.T) {
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := NewFIB()
 	nexthop := NewNexthopResolver(fib)
 	lfib := mpls.NewLFIB()

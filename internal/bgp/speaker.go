@@ -38,6 +38,7 @@ type PeerConfig struct {
 	PeerBGPPort uint16
 	Families    []string
 	RRClient    bool
+	PassiveMode bool
 }
 
 type SpeakerConfig struct {
@@ -178,6 +179,14 @@ func (s *Speaker) addPeer(ctx context.Context, p PeerConfig) error {
 
 	afiSafis := buildAfiSafis(p.Families)
 
+	var rr *api.RouteReflector
+	if p.RRClient && p.ASN == s.cfg.ASN {
+		rr = &api.RouteReflector{
+			RouteReflectorClient:    true,
+			RouteReflectorClusterId: s.cfg.RouterID,
+		}
+	}
+
 	log.Printf("bgp: peer %s: %s AS%d → gobgp neighbor %s:%d, families=%v",
 		p.Name, p.Address, p.ASN, proxy.LocalIP, proxy.OutboundPort, p.Families)
 
@@ -189,7 +198,8 @@ func (s *Speaker) addPeer(ctx context.Context, p PeerConfig) error {
 				LocalAsn:        s.cfg.ASN,
 			},
 			Transport: &api.Transport{
-				RemotePort: uint32(proxy.OutboundPort),
+				RemotePort:  uint32(proxy.OutboundPort),
+				PassiveMode: p.PassiveMode,
 			},
 			Timers: &api.Timers{
 				Config: &api.TimersConfig{
@@ -201,26 +211,10 @@ func (s *Speaker) addPeer(ctx context.Context, p PeerConfig) error {
 				Enabled:     true,
 				RestartTime: 120,
 			},
+			RouteReflector: rr,
 		},
 	}); err != nil {
 		return fmt.Errorf("add peer: %w", err)
-	}
-
-	if p.RRClient && p.ASN == s.cfg.ASN {
-		if err := s.server.AddPeer(ctx, &api.AddPeerRequest{
-			Peer: &api.Peer{
-				Conf: &api.PeerConf{
-					NeighborAddress: proxy.LocalIP.String(),
-					PeerAsn:         p.ASN,
-				},
-				RouteReflector: &api.RouteReflector{
-					RouteReflectorClient:    true,
-					RouteReflectorClusterId: s.cfg.RouterID,
-				},
-			},
-		}); err != nil {
-			log.Printf("bgp: RR for %s: %v", p.Name, err)
-		}
 	}
 
 	return nil

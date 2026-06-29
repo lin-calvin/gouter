@@ -25,7 +25,7 @@ func main() {
 	mplsPeer := "127.0.0.1:16636"
 
 	// Create gouter components
-	ns := netstack.NewManager()
+	ns := netstack.NewManager(true)
 	fib := router.NewFIB()
 	nexthop := router.NewNexthopResolver(fib)
 	lfib := mpls.NewLFIB()

@@ -32,6 +32,7 @@ type BGPPeer struct {
 	PeerBGPPort uint16   `yaml:"peer_bgp_port"`
 	Families    []string `yaml:"families"`
 	RRClient    bool     `yaml:"rr_client"`
+	PassiveMode bool     `yaml:"passive_mode"`
 }
 
 type RouteConfig struct {
@@ -68,7 +69,8 @@ type MPLSUDP struct {
 }
 
 type NetstackConf struct {
-	TCPPort int `yaml:"tcp_port"`
+	TCPPort int    `yaml:"tcp_port"`
+	IPv6    *bool  `yaml:"ipv6"`
 }
 
 type LinkConfig struct {
@@ -121,6 +123,10 @@ func Load(path string) (*Config, error) {
 	if cfg.Netstack.TCPPort == 0 {
 		cfg.Netstack.TCPPort = 8080
 	}
+	if cfg.Netstack.IPv6 == nil {
+		t := true
+		cfg.Netstack.IPv6 = &t
+	}
 	for i := range cfg.WireGuard {
 		if cfg.WireGuard[i].MTU == 0 {
 			cfg.WireGuard[i].MTU = 1420
@@ -134,6 +140,8 @@ func Load(path string) (*Config, error) {
 
 	return &cfg, nil
 }
+
+func (n NetstackConf) IPv6Enabled() bool { return n.IPv6 != nil && *n.IPv6 }
 
 func B64ToHex(s string) (string, error) {
 	b, err := base64.StdEncoding.DecodeString(s)
