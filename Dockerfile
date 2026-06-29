@@ -12,7 +12,7 @@ RUN go mod download
 
 # 复制源码并构建
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/gouter
 
 # 阶段2：运行阶段（更小的镜像）
 FROM alpine:latest
