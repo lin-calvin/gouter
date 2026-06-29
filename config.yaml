@@ -6,7 +6,11 @@ bgp:
       address: "172.22.138.35"
       asn: 4242423166
       families: ["ipv4-unicast"]
-
+    - name: "kindle"
+      address: "172.22.138.40"
+      asn: 4242423166
+      families: ["ipv4-unicast"]
+      rr_client: true
 routes:
   - prefix: "172.22.138.38/32"
     next_hop: "172.22.138.38"
@@ -26,6 +30,15 @@ links:
       public_key: "k4xhSZSjptZXhp+gKzvIUomjVE+dLhEb4IqlEvBjpHA="
       endpoint: "100.64.0.1:51821"
       allowed_ips: "172.16.0.0/12"
+  - name: "kindle"
+    address: "172.22.138.38/32"
+    peer_ip: "172.22.138.40"
+    wireguard:
+      listen_port: 51822
+      private_key: "iDn643NJpI4ZiyIarsN9L8RgTnrm9rIP09IKGdrA4lA=" # JLkKAGKbp8V4u/q1dyTkF0jDRvIdyxtE1236NA8MEAI=
+      mtu: 1420
+      public_key: "RsUeD40VGtF06RelIMnpAZv93RQAjF5Vw+xdGw5XhCk=" #iEgnc1aMKgtDXmPeYj1HsylZYvayBy9L45Eq9KQnXXY=
+      allowed_ips: "172.16.0.0/12"
   - name: "mihomo"
     address: "172.22.138.38/32"
     peer_ip: "172.22.138.39"
@@ -35,6 +48,6 @@ links:
       private_key: "iNTM45kC8wo5MAcdziritJ8XsC28XKNbSAQQwuVh1lk="
       mtu: 1420
       allowed_ips: "172.16.0.0/12"
-      #endpoint: "100.64.0.3:51801"
+      endpoint: "100.64.0.3:51801"
 netstack:
   tcp_port: 8080

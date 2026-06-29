@@ -31,6 +31,7 @@ type BGPPeer struct {
 	ASN         uint32   `yaml:"asn"`
 	PeerBGPPort uint16   `yaml:"peer_bgp_port"`
 	Families    []string `yaml:"families"`
+	RRClient    bool     `yaml:"rr_client"`
 }
 
 type RouteConfig struct {

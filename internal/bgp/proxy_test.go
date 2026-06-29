@@ -30,8 +30,8 @@ func TestProxyManagerCreateProxy(t *testing.T) {
 	if proxy.LocalIP != netip.MustParseAddr("127.0.0.2") {
 		t.Errorf("local = %s", proxy.LocalIP)
 	}
-	if proxy.OutboundPort != 11001 {
-		t.Errorf("port = %d", proxy.OutboundPort)
+	if proxy.OutboundPort == 0 {
+		t.Errorf("port = 0, want non-zero")
 	}
 
 	same, err := pm.CreateProxy("test-peer", peerAddr, 179)
@@ -70,8 +70,8 @@ func TestProxyManagerMultiplePeers(t *testing.T) {
 	if p3.LocalIP != netip.MustParseAddr("127.0.0.4") {
 		t.Errorf("p3 = %s", p3.LocalIP)
 	}
-	if p1.OutboundPort != 11001 || p2.OutboundPort != 11002 || p3.OutboundPort != 11003 {
-		t.Errorf("ports: %d %d %d", p1.OutboundPort, p2.OutboundPort, p3.OutboundPort)
+	if p1.OutboundPort == 0 || p2.OutboundPort == 0 || p3.OutboundPort == 0 {
+		t.Errorf("ports: %d %d %d (all should be non-zero)", p1.OutboundPort, p2.OutboundPort, p3.OutboundPort)
 	}
 
 	if pm.GetProxy(netip.MustParseAddr("10.0.2.2")) != p2 {

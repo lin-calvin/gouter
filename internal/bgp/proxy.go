@@ -39,7 +39,13 @@ func NewProxyManager(ns *netstack.Manager, gobgpPort uint16, startIP netip.Addr,
 		startIP = netip.MustParseAddr("127.0.0.2")
 	}
 	if startPort == 0 {
-		startPort = 11001
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err == nil {
+			startPort = uint16(ln.Addr().(*net.TCPAddr).Port)
+			ln.Close()
+		} else {
+			startPort = 11001
+		}
 	}
 	return &ProxyManager{
 		ns:        ns,
@@ -86,7 +92,7 @@ func (pm *ProxyManager) CreateProxy(name string, peerAddr netip.Addr, peerPort u
 }
 
 func (pm *ProxyManager) StartInbound(ctx context.Context) error {
-	return nil
+	return nil  // disabled: outbound-only avoids connection loop
 }
 
 func (pm *ProxyManager) runOutbound(ln net.Listener, proxy *PeerProxy) {

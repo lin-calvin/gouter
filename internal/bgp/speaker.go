@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"net/netip"
 	"os"
 	"time"
@@ -36,6 +37,7 @@ type PeerConfig struct {
 	ASN         uint32
 	PeerBGPPort uint16
 	Families    []string
+	RRClient    bool
 }
 
 type SpeakerConfig struct {
@@ -49,17 +51,32 @@ type SpeakerConfig struct {
 }
 
 type Speaker struct {
-	cfg        SpeakerConfig
-	server     *server.BgpServer
-	fib        *router.FIB
-	lfib       *mpls.LFIB
-	proxyMgr   *ProxyManager
-	routeCount int
+	cfg          SpeakerConfig
+	server       *server.BgpServer
+	fib          *router.FIB
+	lfib         *mpls.LFIB
+	proxyMgr     *ProxyManager
+	ns           *netstack.Manager
+	routeCount   int
+	internalPort uint16
 }
 
-const gobgpInternalPort = 1790
+// getAvailablePort 获取一个可用的随机端口
+func getAvailablePort() (uint16, error) {
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return 0, fmt.Errorf("failed to listen on port 0: %w", err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	log.Printf("%d", port)
+	if port < 0 || port > 65535 {
+		return 0, fmt.Errorf("invalid port number: %d", port)
+	}
+	return uint16(port), nil
+}
 
-func NewSpeaker(cfg SpeakerConfig, fib *router.FIB, lfib *mpls.LFIB, ns *netstack.Manager) *Speaker {
+func NewSpeaker(cfg SpeakerConfig, fib *router.FIB, lfib *mpls.LFIB, ns *netstack.Manager) (*Speaker, error) {
 	levelVar := new(slog.LevelVar)
 	if os.Getenv("GOUTER_BGP_DEBUG") != "" {
 		levelVar.Set(slog.LevelDebug)
@@ -67,23 +84,32 @@ func NewSpeaker(cfg SpeakerConfig, fib *router.FIB, lfib *mpls.LFIB, ns *netstac
 		levelVar.Set(slog.LevelInfo)
 	}
 	bgpLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: levelVar}))
+
 	return &Speaker{
-		cfg:      cfg,
-		server:   server.NewBgpServer(server.LoggerOption(bgpLogger, levelVar)),
-		fib:      fib,
-		lfib:     lfib,
-		proxyMgr: NewProxyManager(ns, gobgpInternalPort, netip.Addr{}, 0),
-	}
+		cfg:    cfg,
+		server: server.NewBgpServer(server.LoggerOption(bgpLogger, levelVar)),
+		fib:    fib,
+		lfib:   lfib,
+		ns:     ns,
+	}, nil
 }
 
 func (s *Speaker) Start(ctx context.Context) error {
+	// Get random port and create proxy right before StartBgp
+	port, err := getAvailablePort()
+	if err != nil {
+		return fmt.Errorf("get port: %w", err)
+	}
+	s.internalPort = port
+	s.proxyMgr = NewProxyManager(s.ns, port, netip.Addr{}, 0)
+
 	go s.server.Serve()
 
 	if err := s.server.StartBgp(ctx, &api.StartBgpRequest{
 		Global: &api.Global{
 			Asn:        s.cfg.ASN,
 			RouterId:   s.cfg.RouterID,
-			ListenPort: gobgpInternalPort,
+			ListenPort: int32(s.internalPort),
 		},
 	}); err != nil {
 		return fmt.Errorf("start bgp: %w", err)
@@ -125,7 +151,8 @@ func (s *Speaker) Start(ctx context.Context) error {
 		return fmt.Errorf("watch event: %w", err)
 	}
 
-	log.Printf("bgp: AS%d %s (gobgp:1790, netstack:179), %d peers", s.cfg.ASN, s.cfg.RouterID, len(s.cfg.Peers))
+	log.Printf("bgp: AS%d %s (internal port: %d, netstack:179), %d peers",
+		s.cfg.ASN, s.cfg.RouterID, s.internalPort, len(s.cfg.Peers))
 	return nil
 }
 
@@ -177,6 +204,23 @@ func (s *Speaker) addPeer(ctx context.Context, p PeerConfig) error {
 		},
 	}); err != nil {
 		return fmt.Errorf("add peer: %w", err)
+	}
+
+	if p.RRClient && p.ASN == s.cfg.ASN {
+		if err := s.server.AddPeer(ctx, &api.AddPeerRequest{
+			Peer: &api.Peer{
+				Conf: &api.PeerConf{
+					NeighborAddress: proxy.LocalIP.String(),
+					PeerAsn:         p.ASN,
+				},
+				RouteReflector: &api.RouteReflector{
+					RouteReflectorClient:    true,
+					RouteReflectorClusterId: s.cfg.RouterID,
+				},
+			},
+		}); err != nil {
+			log.Printf("bgp: RR for %s: %v", p.Name, err)
+		}
 	}
 
 	return nil
@@ -374,8 +418,8 @@ func (s *Speaker) addLSRoutes(ctx context.Context, ls LSLinkInfo) error {
 
 	// Node NLRI
 	nodeND := &bgp.LsNodeDescriptor{
-		Asn:       localAS,
-		BGPLsID:   binary.BigEndian.Uint32(routerAddr.AsSlice()),
+		Asn:         localAS,
+		BGPLsID:     binary.BigEndian.Uint32(routerAddr.AsSlice()),
 		IGPRouterID: s.cfg.RouterID,
 	}
 	nodeNlri := &bgp.LsNodeNLRI{
@@ -398,8 +442,8 @@ func (s *Speaker) addLSRoutes(ctx context.Context, ls LSLinkInfo) error {
 	// Link NLRI
 	remoteAddr, _ := netip.ParseAddr(ls.RemoteRouterID)
 	remoteND := &bgp.LsNodeDescriptor{
-		Asn:       ls.RemoteASN,
-		BGPLsID:   binary.BigEndian.Uint32(remoteAddr.AsSlice()),
+		Asn:         ls.RemoteASN,
+		BGPLsID:     binary.BigEndian.Uint32(remoteAddr.AsSlice()),
 		IGPRouterID: ls.RemoteRouterID,
 	}
 	linkDesc := &bgp.LsLinkDescriptor{
