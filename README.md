@@ -76,7 +76,12 @@ links:
       allowed_ips: "10.0.2.2/32"
 
 netstack:
-  tcp_port: 8080               # starts a simple "hello world" HTTP server
+  http:
+    port: 8080               # HTTP management UI
+  # forwards:                # expose local services to netstack/WG
+  #   - name: "ssh"
+  #     listen_port: 22
+  #     target: "127.0.0.1:22"
 ```
 
 ### Generating WireGuard Keys
@@ -163,7 +168,8 @@ links:
       allowed_ips: "172.20.2.2/32"
 
 netstack:
-  tcp_port: 8080
+  http:
+    port: 8080
 ```
 
 > **Note**: The `name` of a BGP peer **must** match the `name` of the corresponding WireGuard link.  

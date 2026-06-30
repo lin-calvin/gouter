@@ -50,4 +50,5 @@ links:
       allowed_ips: "172.16.0.0/12"
       endpoint: "100.64.0.3:51801"
 netstack:
-  tcp_port: 8080
+  http:
+    port: 8080

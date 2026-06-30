@@ -72,4 +72,9 @@ links:
       allowed_ips: "172.20.2.2/32"
 
 netstack:
-  tcp_port: 8080
+  http:
+    port: 8080                       # HTTP management UI
+  # forwards:                        # expose local services via netstack
+  #   - name: "ssh"
+  #     listen_port: 2222
+  #     target: "127.0.0.1:22"
