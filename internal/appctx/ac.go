@@ -9,13 +9,14 @@ import (
 )
 
 type AppContext struct {
-	Config     *config.Config
-	NS         *netstack.Manager
-	FIB        *router.FIB
-	Nexthop    *router.NexthopResolver
-	LFIB       *mpls.LFIB
-	Router     *router.Router
-	BGPSpeaker *bgp.Speaker
+	Config         *config.Config
+	NS             *netstack.Manager
+	FIB            *router.FIB
+	Nexthop        *router.NexthopResolver
+	LFIB           *mpls.LFIB
+	Router         *router.Router
+	BGPSpeaker     *bgp.Speaker
+	ForwardManager *netstack.ForwardManager
 }
 
 func New(cfg *config.Config) *AppContext {
@@ -25,6 +26,7 @@ func New(cfg *config.Config) *AppContext {
 	ac.Nexthop = router.NewNexthopResolver(ac.FIB)
 	ac.LFIB = mpls.NewLFIB()
 	ac.Router = router.NewRouter(ac.FIB, ac.Nexthop, ac.NS, ac.LFIB)
+	ac.ForwardManager = netstack.NewForwardManager(ac.NS)
 	return ac
 }
 

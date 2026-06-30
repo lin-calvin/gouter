@@ -70,7 +70,18 @@ type MPLSUDP struct {
 }
 
 type NetstackConf struct {
-	TCPPort int `yaml:"tcp_port"`
+	HTTP     HTTPConfig   `yaml:"http"`
+	Forwards []ForwardCfg `yaml:"forwards"`
+}
+
+type HTTPConfig struct {
+	Port int `yaml:"port"`
+}
+
+type ForwardCfg struct {
+	Name       string `yaml:"name"`
+	ListenPort int    `yaml:"listen_port"`
+	Target     string `yaml:"target"`
 }
 
 type LinkConfig struct {
@@ -120,8 +131,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
-	if cfg.Netstack.TCPPort == 0 {
-		cfg.Netstack.TCPPort = 8080
+	if cfg.Netstack.HTTP.Port == 0 {
+		cfg.Netstack.HTTP.Port = 8080
 	}
 	if cfg.IPv6 == nil {
 		t := true

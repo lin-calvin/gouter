@@ -60,8 +60,8 @@ netstack:
 	if len(cfg.WireGuard) != 1 {
 		t.Errorf("wireguard = %d, want 1", len(cfg.WireGuard))
 	}
-	if cfg.Netstack.TCPPort != 8080 {
-		t.Errorf("tcp_port = %d", cfg.Netstack.TCPPort)
+	if cfg.Netstack.HTTP.Port != 8080 {
+		t.Errorf("http.port = %d", cfg.Netstack.HTTP.Port)
 	}
 }
 
@@ -87,8 +87,8 @@ wireguard:
 	if cfg.WireGuard[0].MTU != 1420 {
 		t.Errorf("default mtu = %d", cfg.WireGuard[0].MTU)
 	}
-	if cfg.Netstack.TCPPort != 8080 {
-		t.Errorf("default tcp_port = %d", cfg.Netstack.TCPPort)
+	if cfg.Netstack.HTTP.Port != 8080 {
+		t.Errorf("default http.port = %d", cfg.Netstack.HTTP.Port)
 	}
 	if len(cfg.BGP.Peers) != 0 {
 		t.Errorf("expected 0 peers, got %d", len(cfg.BGP.Peers))
