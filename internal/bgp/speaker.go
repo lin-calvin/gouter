@@ -22,6 +22,12 @@ import (
 	"github.com/osrg/gobgp/v4/pkg/server"
 )
 
+type SpeakerDeps interface {
+	GetFIB() *router.FIB
+	GetLFIB() *mpls.LFIB
+	GetNS() *netstack.Manager
+}
+
 type LSLinkInfo struct {
 	LocalAddr      netip.Addr
 	PeerAddr       netip.Addr
@@ -78,7 +84,7 @@ func getAvailablePort() (uint16, error) {
 	return uint16(port), nil
 }
 
-func NewSpeaker(cfg SpeakerConfig, fib *router.FIB, lfib *mpls.LFIB, ns *netstack.Manager) (*Speaker, error) {
+func NewSpeaker(cfg SpeakerConfig, deps SpeakerDeps) (*Speaker, error) {
 	levelVar := new(slog.LevelVar)
 	if os.Getenv("GOUTER_BGP_DEBUG") != "" {
 		levelVar.Set(slog.LevelDebug)
@@ -90,9 +96,9 @@ func NewSpeaker(cfg SpeakerConfig, fib *router.FIB, lfib *mpls.LFIB, ns *netstac
 	return &Speaker{
 		cfg:    cfg,
 		server: server.NewBgpServer(server.LoggerOption(bgpLogger, levelVar)),
-		fib:    fib,
-		lfib:   lfib,
-		ns:     ns,
+		fib:    deps.GetFIB(),
+		lfib:   deps.GetLFIB(),
+		ns:     deps.GetNS(),
 	}, nil
 }
 
