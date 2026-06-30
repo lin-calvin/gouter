@@ -49,6 +49,7 @@ type SpeakerConfig struct {
 	ExportRoutes []config.RouteConfig
 	LSLinks      []LSLinkInfo
 	ResolveNH    func(netip.Addr) (string, bool)
+	EnableIPv6   bool
 }
 
 type Speaker struct {
@@ -108,9 +109,10 @@ func (s *Speaker) Start(ctx context.Context) error {
 
 	if err := s.server.StartBgp(ctx, &api.StartBgpRequest{
 		Global: &api.Global{
-			Asn:        s.cfg.ASN,
-			RouterId:   s.cfg.RouterID,
-			ListenPort: int32(s.internalPort),
+			Asn:             s.cfg.ASN,
+			RouterId:        s.cfg.RouterID,
+			ListenPort:      int32(s.internalPort),
+			ListenAddresses: s.listenAddrs(),
 		},
 	}); err != nil {
 		return fmt.Errorf("start bgp: %w", err)
@@ -524,6 +526,13 @@ func familyFromString(s string) *api.Family {
 	default:
 		return nil
 	}
+}
+
+func (s *Speaker) listenAddrs() []string {
+	if s.cfg.EnableIPv6 {
+		return []string{"0.0.0.0", "::"}
+	}
+	return []string{"0.0.0.0"}
 }
 
 func (s *Speaker) resolveTransport(nh netip.Addr) string {
