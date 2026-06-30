@@ -1,2 +1,7 @@
 config.yaml
 gouter
+main
+gouter_arm32
+gouter_arm64
+gouter_armv7
+*.swp
